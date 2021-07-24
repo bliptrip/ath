@@ -40,18 +40,55 @@ int is_digit(unsigned char v) {
 
 bool range_convert_to_int(struct range_t *range, int *result) {
 
-   *result = 0;
+   bool ret = false;
+   int count;
+   unsigned char* buf;
 
-   for (iterator_t i = range->begin; i != range->end; ++i) {
+   do {
+      unsigned int range_len = range_size(range);
+      buf = malloc(range_len+1); //Add one for null-terminator
+      if( !buf ) {
+         break;
+      }
+      memcpy((void*)buf, (void*)range->begin, range_len);
+      buf[range_len] = '\0';
+      count = sscanf(buf, "%d", result);
+      if( count <= 0 ) {
+         free(buf);
+         *result = 0;
+         break;
+      }
+      free(buf);
+      ret = true;
+   } while(0);
 
-      if (false == is_digit(*i))
-         return false;
+   return(ret);
+}
 
-      *result *= 10;
-      *result += *i - '0';
-   }
+bool range_convert_to_double(struct range_t *range, double *result) {
+   bool ret = false;
+   int count;
+   unsigned char* buf;
 
-   return true;
+   do {
+      unsigned int range_len = range_size(range);
+      buf = malloc(range_len+1); //Add one for null-terminator
+      if( !buf ) {
+         break;
+      }
+      memcpy((void*)buf, (void*)range->begin, range_len);
+      buf[range_len] = '\0';
+      count = sscanf(buf, "%f", result);
+      if( count <= 0 ) {
+         free(buf);
+         *result = 0.0;
+         break;
+      }
+      free(buf);
+      ret = true;
+   } while(0);
+
+   return(ret);
 }
 
 bool range_all_digits(struct range_t *range) {
