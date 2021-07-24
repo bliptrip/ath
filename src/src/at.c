@@ -2,7 +2,7 @@
 #include "at_internal.h"
 
 struct at_context_t {
-   void (*flush)(struct range_t*);
+   void (*flush)(struct range_t*, void* udata);
    unsigned char *output_buffer;
    iterator_t outputbuff_iterator;
    struct at_command_register_t *first;
@@ -13,14 +13,16 @@ struct at_context_t {
    iterator_t lastinbuff_iterator;
    int cmee_level;
    bool echo;
+   void* udata; //User-data passed to 'flush' callback
 };
 
 
 struct at_command_register_t {
    const char *tag;
-   void (*function)(struct at_function_result*, struct at_function_context_t*);
+   void (*function)(struct at_function_result*, struct at_function_context_t*, void* udata);
    struct at_command_register_t *next;
    enum AT_CMD_TYPE cmd_type;
+   void *udata; //Opaque user data pointer passed to command callback function
 };
 
 void at_function_result_init(struct at_function_result *p) {
@@ -38,7 +40,7 @@ void at_flush_output(struct at_context_t *ctx){
       range.end = ctx->outputbuff_iterator;
 
       if ( range_is_empty (&range) == false) {
-         ctx->flush(&range);
+         ctx->flush(&range, ctx->udata);
       }
    }
 
@@ -66,7 +68,13 @@ void at_append_text(struct at_context_t *ctx, const char *text){
 
 void at_append_int(struct at_context_t *ctx, int value){
    char buff[20];
-   snprintf(buff, 20, "%i", value);
+   snprintf(buff, sizeof(buff), "%i", value);
+   at_append_text(ctx, buff);
+}
+
+void at_append_double(struct at_context_t *ctx, double value){
+   char buff[20];
+   snprintf(buff, sizeof(buff), "%f", value);
    at_append_text(ctx, buff);
 }
 
@@ -245,13 +253,15 @@ void at_command_init(struct at_command_register_t *c){
    c->cmd_type = AT_STANDALONE_COMMAND;
    c->next = 0;
    c->function = 0;
+   c->udata = NULL;
 }
 
 void at_command_add(
       struct at_context_t *ctx,
       const char *tag,
       enum AT_CMD_TYPE cmd_type,
-      void (*function)(struct at_function_result*, struct at_function_context_t*)){
+      void (*function)(struct at_function_result*, struct at_function_context_t*, void* udata),
+      void* udata) {
 
    struct at_command_register_t *p = (struct at_command_register_t*)malloc(sizeof(struct at_command_register_t));
    at_command_init(p);
@@ -260,16 +270,18 @@ void at_command_add(
    p->function = function;
    p->tag = tag;
    p->next = ctx->first;
+   p->udata = udata;
    ctx->first = p;
 }
 
-void at_context_init(struct at_context_t **ctx, void (*flush)(struct range_t*)) {
+void at_context_init(struct at_context_t **ctx, void (*flush)(struct range_t*, void* udata), void* udata) {
 
    *ctx = (struct at_context_t*)malloc(sizeof(struct at_context_t));
 
    if (ctx == 0)
       return;
 
+   (*ctx)->udata = udata;
    (*ctx)->cmee_level = 0;
    (*ctx)->flush = flush;
    (*ctx)->echo = true;
@@ -293,12 +305,12 @@ void at_context_init(struct at_context_t **ctx, void (*flush)(struct range_t*)) 
       return;
    }
 
-   at_command_add(*ctx, "+cmee", AT_ASSIGNMENT_COMMAND, at_cmee_buildin_assignment);
-   at_command_add(*ctx, "+cmee", AT_STATUS_COMMAND, at_cmee_buildin_status);
-   at_command_add(*ctx, "", AT_STANDALONE_COMMAND, at_standalone_buildin);
+   at_command_add(*ctx, "+cmee", AT_ASSIGNMENT_COMMAND, at_cmee_buildin_assignment, NULL);
+   at_command_add(*ctx, "+cmee", AT_STATUS_COMMAND, at_cmee_buildin_status, NULL);
+   at_command_add(*ctx, "", AT_STANDALONE_COMMAND, at_standalone_buildin, NULL);
 
-   at_command_add(*ctx, "e0", AT_STANDALONE_COMMAND, ate0_buildin_status);
-   at_command_add(*ctx, "e1", AT_STANDALONE_COMMAND, ate1_buildin_status);
+   at_command_add(*ctx, "e0", AT_STANDALONE_COMMAND, ate0_buildin_status, NULL);
+   at_command_add(*ctx, "e1", AT_STANDALONE_COMMAND, ate1_buildin_status, NULL);
 
 }
 
@@ -313,8 +325,12 @@ struct range_t get_line(struct range_t *data){
    }
 }
 
-static void *at_get_state (struct at_context_t *context) {
+void *at_get_state (struct at_context_t *context) {
    return context->state;
+}
+
+void at_set_state (struct at_context_t *context, void* state) {
+   context->state = state;
 }
 
 bool at_get_in_quota_value(struct range_t *range, struct range_t *result){
@@ -493,7 +509,7 @@ static struct at_function_result at_process_command(
          result.detailed = "Unknown error";
          result.result = false;
 
-         reg_ptr->function(&result, &fctx);
+         reg_ptr->function(&result, &fctx, reg_ptr->udata);
 
          return result;
       }
