@@ -32,6 +32,7 @@ unsigned int range_size(struct range_t *range);
 bool is_digit(unsigned char v);
 
 bool range_convert_to_int(struct range_t *range, int *result);
+bool range_convert_to_double(struct range_t *range, double *result);
 
 bool range_all_digits(struct range_t *range);
 
