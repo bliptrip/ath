@@ -7,6 +7,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 #ifndef AT_INPUT_BUFFER_SIZE
 #define AT_INPUT_BUFFER_SIZE 32
 #endif
@@ -37,8 +42,10 @@ struct at_function_context_t{
    struct range_t parameters;
 };
 
+typedef void (*pflush)(struct range_t*, void* udata);
+
 void at_function_result_init(struct at_function_result *p);
-void at_context_init(struct at_context_t **ctx, void (*flush)(struct range_t*, void* udata), void* udata);
+void at_context_init(struct at_context_t **ctx, pflush flush, void* udata);
 
 void at_command_add(
       struct at_context_t *ctx,
@@ -80,5 +87,9 @@ void at_append_int(struct at_context_t *ctx, int value);
 void at_append_double(struct at_context_t *ctx, double value);
 void at_append_text(struct at_context_t *ctx, const char *text);
 void at_append_char(struct at_context_t *ctx, unsigned char c);
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 #endif

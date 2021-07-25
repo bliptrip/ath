@@ -1,6 +1,11 @@
 #ifndef RANGE_H
 #define RANGE_H
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 #define iterator_t unsigned char *
 
 #ifndef bool
@@ -56,5 +61,9 @@ bool range_is_numeric(struct range_t *data);
 unsigned int range_strlen(unsigned char *p);
 
 bool range_ranges_equals(struct range_t *first, struct range_t *second);
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 #endif

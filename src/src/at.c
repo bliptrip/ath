@@ -2,7 +2,7 @@
 #include "at_internal.h"
 
 struct at_context_t {
-   void (*flush)(struct range_t*, void* udata);
+   pflush flush;
    unsigned char *output_buffer;
    iterator_t outputbuff_iterator;
    struct at_command_register_t *first;
@@ -136,7 +136,7 @@ void at_ok_result(struct at_function_result *r) {
 }
 
 
-void  at_cmee_buildin_status(struct at_function_result *r, struct at_function_context_t *ctx){
+void  at_cmee_buildin_status(struct at_function_result *r, struct at_function_context_t *ctx, void* udata){
    at_append_line(ctx->context, "");
    at_append_text(ctx->context, "+CMEE: ");
    at_append_int(ctx->context, ctx->context->cmee_level);
@@ -144,13 +144,13 @@ void  at_cmee_buildin_status(struct at_function_result *r, struct at_function_co
    at_ok_result(r);
 }
 
-static void ate0_buildin_status(struct at_function_result  *r, struct at_function_context_t *ctx){
+static void ate0_buildin_status(struct at_function_result  *r, struct at_function_context_t *ctx, void* udata){
    ctx->context->echo = false;
    at_ok_result(r);
 }
 
 
-static void ate1_buildin_status(struct at_function_result  *r, struct at_function_context_t *ctx){
+static void ate1_buildin_status(struct at_function_result  *r, struct at_function_context_t *ctx, void* udata){
    ctx->context->echo = true;
    at_ok_result(r);
 }
@@ -173,13 +173,14 @@ iterator_t at_get_parameter(iterator_t begin, iterator_t end, struct range_t *re
 }
 
 
-static void at_standalone_buildin(struct at_function_result *r, struct at_function_context_t *ctx){
+static void at_standalone_buildin(struct at_function_result *r, struct at_function_context_t *ctx, void* udata){
    at_ok_result(r);
 }
 
 static void at_cmee_buildin_assignment(
       struct at_function_result *r,
-      struct at_function_context_t *ctx){
+      struct at_function_context_t *ctx,
+      void* udata){
 
 
    if (range_is_empty(&ctx->parameters)) {
@@ -274,8 +275,7 @@ void at_command_add(
    ctx->first = p;
 }
 
-void at_context_init(struct at_context_t **ctx, void (*flush)(struct range_t*, void* udata), void* udata) {
-
+void at_context_init(struct at_context_t **ctx, pflush flush, void* udata) {
    *ctx = (struct at_context_t*)malloc(sizeof(struct at_context_t));
 
    if (ctx == 0)
