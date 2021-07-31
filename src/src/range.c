@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include "range.h"
 #include "range_internal.h"
 
@@ -39,10 +40,10 @@ int is_digit(unsigned char v) {
 }
 
 bool range_convert_to_int(struct range_t *range, int *result) {
-
    bool ret = false;
-   int count;
    unsigned char* buf;
+   char* endptr;
+   int value;
 
    do {
       unsigned int range_len = range_size(range);
@@ -52,14 +53,12 @@ bool range_convert_to_int(struct range_t *range, int *result) {
       }
       memcpy((void*)buf, (void*)range->begin, range_len);
       buf[range_len] = '\0';
-      count = sscanf(buf, "%d", result);
-      if( count <= 0 ) {
-         free(buf);
-         *result = 0;
-         break;
+      value = (int)strtol(buf, &endptr, 0);
+      if( (endptr != buf) && (*endptr == '\0') ) {
+         *result = value;
+         ret = true;
       }
       free(buf);
-      ret = true;
    } while(0);
 
    return(ret);
@@ -67,8 +66,9 @@ bool range_convert_to_int(struct range_t *range, int *result) {
 
 bool range_convert_to_double(struct range_t *range, double *result) {
    bool ret = false;
-   int count;
-   unsigned char* buf;
+   char* buf;
+   char* endptr;
+   double value;
 
    do {
       unsigned int range_len = range_size(range);
@@ -78,14 +78,12 @@ bool range_convert_to_double(struct range_t *range, double *result) {
       }
       memcpy((void*)buf, (void*)range->begin, range_len);
       buf[range_len] = '\0';
-      count = sscanf(buf, "%f", result);
-      if( count <= 0 ) {
-         free(buf);
-         *result = 0.0;
-         break;
+      value = strtod(buf, &endptr);
+      if( (endptr != buf) && (*endptr == '\0') ) {
+         *result = value;
+         ret = true;
       }
       free(buf);
-      ret = true;
    } while(0);
 
    return(ret);
