@@ -12,6 +12,56 @@ extern "C"
 {
 #endif
 
+#ifndef AT_TRACE
+#ifdef AT_YES_TRACE
+extern int at_trace(const char* fmt, ...); //Defined elsewhere to customize how printing is done
+#define AT_TRACE_(fmt, ...) at_trace("%s:%d:%s():trace: " fmt "%s\n", __FILE__, __LINE__, __func__, __VA_ARGS__)
+#define AT_TRACE(...) AT_TRACE_(__VA_ARGS__, "")
+#else
+#define AT_TRACE(...)
+#endif
+#endif
+
+#ifndef AT_DEBUG
+#ifndef AT_NO_DEBUG
+#define AT_DEBUG_(fmt, ...) \
+    at_trace("%s:%d:debug: " fmt "%s\n", __FILE__, __LINE__, __VA_ARGS__)
+#define AT_DEBUG(...) AT_DEBUG_(__VA_ARGS__, "")
+#else
+#define AT_DEBUG(...)
+#endif
+#endif
+
+#ifndef AT_WARN
+#ifndef AT_NO_WARN
+#define AT_WARN_(fmt, ...) \
+    at_trace("%s:%d:warn: " fmt "%s\n", __FILE__, __LINE__, __VA_ARGS__)
+#define AT_WARN(...) AT_WARN_(__VA_ARGS__, "")
+#else
+#define AT_WARN(...)
+#endif
+#endif
+
+#ifndef AT_ERROR
+#ifndef AT_NO_ERROR
+#define AT_ERROR_(fmt, ...) \
+    at_trace("%s:%d:error: " fmt "%s\n", __FILE__, __LINE__, __VA_ARGS__)
+#define AT_ERROR(...) AT_ERROR_(__VA_ARGS__, "")
+#else
+#define AT_ERROR(...)
+#endif
+#endif
+
+// Runtime assertions
+#ifndef AT_ASSERT
+#ifndef AT_NO_ASSERT
+#define AT_ASSERT(test) assert(test)
+#else
+#define AT_ASSERT(test)
+#endif
+#endif
+
+
 #ifndef AT_INPUT_BUFFER_SIZE
 #define AT_INPUT_BUFFER_SIZE 32
 #endif

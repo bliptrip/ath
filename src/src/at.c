@@ -379,6 +379,7 @@ void split_at_commands(struct range_t *command, void(*ptr)(struct range_t* )){
 }
 
 bool get_at_command(struct range_t *input, struct range_t *result){
+   AT_TRACE("begin: %p, end: %p, size: %d", input->begin, input->end, range_size(input));
 
    if ( range_size(input) < 2) {
       return  false;
@@ -479,6 +480,8 @@ static struct at_function_result at_process_command(
 
    enum AT_CMD_TYPE cmd_type = at_get_cmd_type(&tag, command);
 
+   AT_TRACE("ctx: %p, command->begin: %p, command->end: %p, tag.begin: %p, tag.end: %p, type: %d", ctx, command->begin, command->end, tag.begin, tag.end, cmd_type);
+
 
    if (cmd_type != AT_UNKOWN_COMMAND) {
 
@@ -526,6 +529,8 @@ static struct at_function_result at_process_chunk(
       struct range_t *data,
       bool first_chunk){
 
+   AT_TRACE("ctx = %p, begin = %p, end = %p, first_chunk = %d", ctx, data->begin, data->end, first_chunk);
+
    if (first_chunk) {
       struct range_t r;
       if (get_at_command(data, &r)){
@@ -549,6 +554,8 @@ static void at_process_commands(
    iterator_t b_cmd = line->begin;
    struct at_function_result result;
    at_function_result_init (&result);
+
+   AT_TRACE("ctx = %p, begin = %p, end = %p", ctx, line->begin, line->end);
 
    for (iterator_t it = line->begin; it != line->end; ++it) {
 
@@ -612,6 +619,8 @@ void at_process_line(
       struct range_t *line) {
 
    struct range_t trimmed_line =  range_trim(line);
+   
+   AT_TRACE("ctx = %p, begin = %p, end = %p", ctx, line->begin, line->end);
 
    if ( range_is_empty(&trimmed_line) || range_size(&trimmed_line) < 2) {
       return;
@@ -630,8 +639,11 @@ void at_process_input(
       struct at_context_t *ctx,
       struct range_t *data){
 
-   if ( range_is_empty(data))
+   AT_TRACE("ctx = %p, begin = %p, end = %p", ctx, data->begin, data->end);
+
+   if ( range_is_empty(data)) {
       return;
+   }
 
    if (ctx->echo) {
       at_append_range(ctx, data);
@@ -640,6 +652,7 @@ void at_process_input(
 
    for (iterator_t i = data->begin; i != data->end; ++i) {
 
+      AT_TRACE("inputbuff_iterator=%p, input_buffer=%p, i = %p, *i = %c", ctx->inputbuff_iterator, ctx->input_buffer, i, *i);
       if ( *i == '\r' && ctx->inputbuff_iterator != ctx->input_buffer) {
          struct range_t line = get_range_by_iterators(ctx->input_buffer, ctx->inputbuff_iterator);
          at_process_line( ctx, &line);
