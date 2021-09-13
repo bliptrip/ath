@@ -3,14 +3,15 @@
 
 struct at_context_t {
    pflush flush;
-   unsigned char *output_buffer;
-   iterator_t outputbuff_iterator;
+   size_t num_streams;
+   unsigned char *output_buffers;
+   iterator_t *outputbuff_iterators;
    struct at_command_register_t *first;
    void *state;
-   unsigned char *input_buffer;
-   iterator_t inputbuff_iterator;
-   unsigned char *last_input_buffer;
-   iterator_t lastinbuff_iterator;
+   unsigned char *input_buffers;
+   iterator_t *inputbuff_iterators;
+   unsigned char *last_input_buffers;
+   iterator_t *lastinbuff_iterators;
    int cmee_level;
    bool echo;
    void* udata; //User-data passed to 'flush' callback
@@ -31,56 +32,57 @@ void at_function_result_init(struct at_function_result *p) {
    p->code = 0;
 }
 
-void at_flush_output(struct at_context_t *ctx){
+void at_flush_output(struct at_context_t *ctx, uint32_t stream_id){
    if (ctx->flush != 0){
 
       struct range_t range;
 
-      range.begin = ctx->output_buffer;
-      range.end = ctx->outputbuff_iterator;
+      range.begin = ctx->output_buffers + (stream_id * AT_OUTPUT_BUFFER_SIZE);
+      range.end = ctx->outputbuff_iterators[stream_id];
 
       if ( range_is_empty (&range) == false) {
-         ctx->flush(&range, ctx->udata);
+         ctx->flush(&range, ctx->udata, stream_id);
       }
    }
 
-   ctx->outputbuff_iterator = ctx->output_buffer;
+   ctx->outputbuff_iterators[stream_id] = ctx->output_buffers + (stream_id * AT_OUTPUT_BUFFER_SIZE);
 }
 
-iterator_t at_get_output_buffer_end_iterator(struct at_context_t *ctx) {
-   return ctx->output_buffer + AT_OUTPUT_BUFFER_SIZE;
+iterator_t at_get_output_buffer_end_iterator(struct at_context_t *ctx, uint32_t stream_id) {
+   return ctx->output_buffers + ((stream_id + 1) * AT_OUTPUT_BUFFER_SIZE);
 }
 
-void at_append_char(struct at_context_t *ctx, unsigned char c){
+void at_append_char(struct at_context_t *ctx, unsigned char c, uint32_t stream_id){
 
-   if (ctx->outputbuff_iterator == at_get_output_buffer_end_iterator(ctx)) {
-      at_flush_output(ctx);
+   if (ctx->outputbuff_iterators[stream_id] == at_get_output_buffer_end_iterator(ctx, stream_id)) {
+      at_flush_output(ctx, stream_id);
    }
 
-   *ctx->outputbuff_iterator++ = c;
+   *(ctx->outputbuff_iterators[stream_id]) = c;
+   ctx->outputbuff_iterators[stream_id] = ctx->outputbuff_iterators[stream_id] + 1;
 }
 
-void at_append_text(struct at_context_t *ctx, const char *text){
+void at_append_text(struct at_context_t *ctx, const char *text, uint32_t stream_id){
    while (*text != 0) {
-      at_append_char(ctx, *text++);
+      at_append_char(ctx, *text++, stream_id);
    }
 }
 
-void at_append_int(struct at_context_t *ctx, int value){
+void at_append_int(struct at_context_t *ctx, int value, uint32_t stream_id){
    char buff[20];
    snprintf(buff, sizeof(buff), "%i", value);
-   at_append_text(ctx, buff);
+   at_append_text(ctx, buff, stream_id);
 }
 
-void at_append_double(struct at_context_t *ctx, double value){
+void at_append_double(struct at_context_t *ctx, double value, uint32_t stream_id){
    char buff[20];
    snprintf(buff, sizeof(buff), "%f", value);
-   at_append_text(ctx, buff);
+   at_append_text(ctx, buff, stream_id);
 }
 
-void at_append_line(struct at_context_t *ctx, const char *text){
-   at_append_text(ctx, text);
-   at_append_text(ctx, "\r\n");
+void at_append_line(struct at_context_t *ctx, const char *text, uint32_t stream_id){
+   at_append_text(ctx, text, stream_id);
+   at_append_text(ctx, "\r\n", stream_id);
 }
 
 
@@ -137,10 +139,10 @@ void at_ok_result(struct at_function_result *r) {
 
 
 void  at_cmee_buildin_status(struct at_function_result *r, struct at_function_context_t *ctx, void* udata){
-   at_append_line(ctx->context, "");
-   at_append_text(ctx->context, "+CMEE: ");
-   at_append_int(ctx->context, ctx->context->cmee_level);
-   at_append_line(ctx->context, "");
+   at_append_line(ctx->context, "", ctx->stream_id);
+   at_append_text(ctx->context, "+CMEE: ", ctx->stream_id);
+   at_append_int(ctx->context, ctx->context->cmee_level, ctx->stream_id);
+   at_append_line(ctx->context, "", ctx->stream_id);
    at_ok_result(r);
 }
 
@@ -184,15 +186,14 @@ static void at_cmee_buildin_assignment(
 
 
    if (range_is_empty(&ctx->parameters)) {
-
       at_return_operation_not_supported_error(r);
       return;
    }
 
    if (range_equals(&ctx->parameters, "?") ||
        range_equals(&ctx->parameters, "\"?\"")) {
-      at_append_line(ctx->context, "");
-      at_append_line(ctx->context, "+CMEE: (0-2)");
+      at_append_line(ctx->context, "", ctx->stream_id);
+      at_append_line(ctx->context, "+CMEE: (0-2)", ctx->stream_id);
       at_ok_result(r);
       return ;
    }
@@ -234,16 +235,20 @@ void at_context_free(struct at_context_t *ctx){
       at_command_free(ctx->first);
    }
 
-   if (ctx->input_buffer != 0) {
-      free (ctx->input_buffer);
+   if (ctx->input_buffers != 0) {
+      free (ctx->input_buffers);
    }
 
-   if (ctx->output_buffer != 0) {
-      free (ctx->output_buffer);
+   if (ctx->inputbuff_iterators != 0) {
+      free (ctx->inputbuff_iterators);
    }
 
-   if (ctx->last_input_buffer != 0) {
-      free(ctx->last_input_buffer);
+   if (ctx->output_buffers != 0) {
+      free (ctx->output_buffers);
+   }
+
+   if (ctx->last_input_buffers != 0) {
+      free(ctx->last_input_buffers);
    }
 
    free (ctx);
@@ -263,9 +268,9 @@ void at_command_add(
       enum AT_CMD_TYPE cmd_type,
       void (*function)(struct at_function_result*, struct at_function_context_t*, void* udata),
       void* udata) {
-
    struct at_command_register_t *p = (struct at_command_register_t*)malloc(sizeof(struct at_command_register_t));
    at_command_init(p);
+   struct range_t tag_mod;
 
    p->cmd_type = cmd_type;
    p->function = function;
@@ -275,8 +280,9 @@ void at_command_add(
    ctx->first = p;
 }
 
-void at_context_init(struct at_context_t **ctx, pflush flush, void* udata) {
-   *ctx = (struct at_context_t*)malloc(sizeof(struct at_context_t));
+void at_context_init(struct at_context_t **ctx, pflush flush, size_t num_streams, void *udata)
+{
+   *ctx = (struct at_context_t *)malloc(sizeof(struct at_context_t));
 
    if (ctx == 0)
       return;
@@ -284,20 +290,31 @@ void at_context_init(struct at_context_t **ctx, pflush flush, void* udata) {
    (*ctx)->udata = udata;
    (*ctx)->cmee_level = 0;
    (*ctx)->flush = flush;
+   (*ctx)->num_streams = num_streams;
    (*ctx)->echo = true;
    (*ctx)->first = 0;
    (*ctx)->state = 0;
-   (*ctx)->input_buffer = (unsigned char *)malloc(AT_INPUT_BUFFER_SIZE);
-   (*ctx)->inputbuff_iterator = (*ctx)->input_buffer;
-   (*ctx)->output_buffer = (unsigned char *)malloc(AT_OUTPUT_BUFFER_SIZE);
-   (*ctx)->outputbuff_iterator = (*ctx)->output_buffer;
+   (*ctx)->input_buffers = (unsigned char *)malloc(AT_INPUT_BUFFER_SIZE * num_streams);
+   (*ctx)->output_buffers = (unsigned char *)malloc(AT_OUTPUT_BUFFER_SIZE * num_streams);
+   (*ctx)->inputbuff_iterators = (iterator_t *)malloc(num_streams * sizeof(iterator_t));
+   (*ctx)->outputbuff_iterators = (iterator_t *)malloc(num_streams * sizeof(iterator_t));
+   (*ctx)->last_input_buffers = (unsigned char *)malloc(AT_INPUT_BUFFER_SIZE * num_streams);
+   (*ctx)->lastinbuff_iterators = (iterator_t *)malloc(num_streams * sizeof(iterator_t));
 
-   (*ctx)->last_input_buffer = (unsigned char *)malloc(AT_INPUT_BUFFER_SIZE);
-   (*ctx)->lastinbuff_iterator = (*ctx)->last_input_buffer;
+   for (int i = 0; i < num_streams; i++)
+   {
+      (*ctx)->inputbuff_iterators[i] = (*ctx)->input_buffers + (i * AT_INPUT_BUFFER_SIZE);
+      (*ctx)->outputbuff_iterators[i] = (*ctx)->output_buffers + (i * AT_OUTPUT_BUFFER_SIZE);
+      (*ctx)->lastinbuff_iterators[i] = (*ctx)->last_input_buffers + (i * AT_INPUT_BUFFER_SIZE);
+   }
 
-   if ((*ctx)->input_buffer == 0  ||
-       (*ctx)->output_buffer == 0 ||
-       (*ctx)->last_input_buffer == 0) {
+   if ((*ctx)->input_buffers == 0 ||
+       (*ctx)->inputbuff_iterators == 0 ||
+       (*ctx)->output_buffers == 0 ||
+       (*ctx)->outputbuff_iterators == 0 ||
+       (*ctx)->last_input_buffers == 0 ||
+       (*ctx)->lastinbuff_iterators == 0)
+   {
 
       at_context_free(*ctx);
       *ctx = 0;
@@ -311,7 +328,6 @@ void at_context_init(struct at_context_t **ctx, pflush flush, void* udata) {
 
    at_command_add(*ctx, "e0", AT_STANDALONE_COMMAND, ate0_buildin_status, NULL);
    at_command_add(*ctx, "e1", AT_STANDALONE_COMMAND, ate1_buildin_status, NULL);
-
 }
 
 struct range_t get_line(struct range_t *data){
@@ -397,9 +413,9 @@ bool get_at_command(struct range_t *input, struct range_t *result){
    return false;
 }
 
-static void at_append_range(struct at_context_t *ctx, struct range_t *range){
+static void at_append_range(struct at_context_t *ctx, struct range_t *range, uint32_t stream_id){
    for (iterator_t it = range->begin; it != range->end; ++it) {
-      at_append_char(ctx, *it);
+      at_append_char(ctx, *it, stream_id);
    }
 }
 
@@ -461,20 +477,21 @@ static struct at_command_register_t *at_find_command_register(
    return 0;
 }
 
-static void at_append_ok(struct at_context_t *ctx) {
-   at_append_line(ctx, "");
-   at_append_line(ctx, "OK");
+static void at_append_ok(struct at_context_t *ctx, uint32_t stream_id) {
+   at_append_line(ctx, "", stream_id);
+   at_append_line(ctx, "OK", stream_id);
 }
 
-static void at_append_error(struct at_context_t *ctx) {
-   at_append_line(ctx, "");
-   at_append_line(ctx, "ERROR");
+static void at_append_error(struct at_context_t *ctx, uint32_t stream_id) {
+   at_append_line(ctx, "", stream_id);
+   at_append_line(ctx, "ERROR", stream_id);
 }
 
 
 static struct at_function_result at_process_command(
       struct at_context_t *ctx,
-      struct range_t *command) {
+      struct range_t *command,
+      uint32_t stream_id) {
 
    struct range_t tag = at_get_tag(command);
 
@@ -497,6 +514,7 @@ static struct at_function_result at_process_command(
 
          struct at_function_context_t fctx;
          fctx.context = ctx;
+         fctx.stream_id = stream_id;
          range_init(&fctx.parameters);
 
          if (cmd_type == AT_ASSIGNMENT_COMMAND) {
@@ -527,27 +545,29 @@ static struct at_function_result at_process_command(
 static struct at_function_result at_process_chunk(
       struct at_context_t *ctx,
       struct range_t *data,
-      bool first_chunk){
+      bool first_chunk,
+      uint32_t stream_id) {
 
    AT_TRACE("ctx = %p, begin = %p, end = %p, first_chunk = %d", ctx, data->begin, data->end, first_chunk);
 
    if (first_chunk) {
       struct range_t r;
       if (get_at_command(data, &r)){
-         return at_process_command(ctx, &r);
+         return at_process_command(ctx, &r, stream_id);
       } else {
          struct at_function_result r;
          at_return_operation_not_supported_error(&r);
          return r;
       }
    } else {
-      return at_process_command(ctx, data);
+      return at_process_command(ctx, data, stream_id);
    }
 }
 
 static void at_process_commands(
       struct at_context_t *ctx,
-      struct range_t *line) {
+      struct range_t *line,
+      uint32_t stream_id) {
 
    bool qt = false;
    bool first_chunk = true;
@@ -572,7 +592,7 @@ static void at_process_commands(
 
          cmd_range = range_trim(&cmd_range);
 
-         result = at_process_chunk(ctx, &cmd_range, first_chunk);
+         result = at_process_chunk(ctx, &cmd_range, first_chunk, stream_id);
 
          if (result.result == false)
             break;
@@ -585,38 +605,39 @@ static void at_process_commands(
    if (result.result == true) {
       struct range_t cmd_range = range_create_it(b_cmd, line->end);
       cmd_range = range_trim(&cmd_range);
-      result = at_process_chunk(ctx, &cmd_range, first_chunk);
+      result = at_process_chunk(ctx, &cmd_range, first_chunk, stream_id);
    }
 
    if (result.result == true) {
-      at_append_ok(ctx);
+      at_append_ok(ctx, stream_id);
    } else {
 
       switch (ctx->cmee_level){
 
       case 0:
-         at_append_error(ctx);
+         at_append_error(ctx, stream_id);
          break;
       case 1:
-         at_append_line(ctx, "");
-         at_append_text(ctx, "+CME ERROR: ");
-         at_append_int(ctx, result.code);
-         at_append_line(ctx, "");
+         at_append_line(ctx, "", stream_id);
+         at_append_text(ctx, "+CME ERROR: ", stream_id);
+         at_append_int(ctx, result.code, stream_id);
+         at_append_line(ctx, "", stream_id);
          break;
       case 2:
-         at_append_line(ctx, "");
-         at_append_text(ctx, "+CME ERROR: ");
-         at_append_line(ctx, result.detailed);
+         at_append_line(ctx, "", stream_id);
+         at_append_text(ctx, "+CME ERROR: ", stream_id);
+         at_append_line(ctx, result.detailed, stream_id);
       }
    }
 
-   at_flush_output(ctx);
+   at_flush_output(ctx, stream_id);
 }
 
 
 void at_process_line(
       struct at_context_t *ctx,
-      struct range_t *line) {
+      struct range_t *line,
+      uint32_t stream_id) {
 
    struct range_t trimmed_line =  range_trim(line);
    
@@ -626,18 +647,23 @@ void at_process_line(
       return;
    }
 
-   at_process_commands(ctx, &trimmed_line);
+   at_process_commands(ctx, &trimmed_line, stream_id);
 }
 
 static iterator_t at_get_input_buffer_end_iterator(
-      struct at_context_t *ctx) {
+      struct at_context_t *ctx,
+      uint32_t stream_id) {
 
-   return ctx->input_buffer + AT_INPUT_BUFFER_SIZE;
+   return ctx->input_buffers + ((stream_id+1) * AT_INPUT_BUFFER_SIZE);
 }
 
 void at_process_input(
       struct at_context_t *ctx,
-      struct range_t *data){
+      struct range_t *data,
+      uint32_t stream_id ) {
+
+   unsigned char* input_buffer = ctx->input_buffers + (stream_id * AT_INPUT_BUFFER_SIZE);
+   unsigned char* last_input_buffer = ctx->last_input_buffers + (stream_id * AT_INPUT_BUFFER_SIZE);
 
    AT_TRACE("ctx = %p, begin = %p, end = %p", ctx, data->begin, data->end);
 
@@ -646,65 +672,66 @@ void at_process_input(
    }
 
    if (ctx->echo) {
-      at_append_range(ctx, data);
-      at_flush_output(ctx);
+      at_append_range(ctx, data, stream_id);
+      at_flush_output(ctx, stream_id);
    }
 
    for (iterator_t i = data->begin; i != data->end; ++i) {
+      AT_TRACE("inputbuff_iterator=%p, input_buffer=%p, i = %p, *i = %c", ctx->inputbuff_iterators[stream_id], input_buffer, i, *i);
+      if ( *i == '\r' && ctx->inputbuff_iterators[stream_id] != input_buffer) {
+         struct range_t line = get_range_by_iterators(input_buffer, ctx->inputbuff_iterators[stream_id]);
+         at_process_line( ctx, &line, stream_id );
 
-      AT_TRACE("inputbuff_iterator=%p, input_buffer=%p, i = %p, *i = %c", ctx->inputbuff_iterator, ctx->input_buffer, i, *i);
-      if ( *i == '\r' && ctx->inputbuff_iterator != ctx->input_buffer) {
-         struct range_t line = get_range_by_iterators(ctx->input_buffer, ctx->inputbuff_iterator);
-         at_process_line( ctx, &line);
+         ctx->lastinbuff_iterators[stream_id] = ctx->last_input_buffers + (stream_id * AT_INPUT_BUFFER_SIZE);
 
-         ctx->lastinbuff_iterator = ctx->last_input_buffer;
-
-         for (iterator_t i = ctx->input_buffer; i != ctx->inputbuff_iterator; ++i) {
-            *(ctx->lastinbuff_iterator)++ = *i;
+         for (iterator_t i = input_buffer; i != ctx->inputbuff_iterators[stream_id]; ++i) {
+            *(ctx->lastinbuff_iterators[stream_id]) = *i;
+            ctx->lastinbuff_iterators[stream_id] = ctx->lastinbuff_iterators[stream_id] + 1;
          }
 
-         ctx->inputbuff_iterator = ctx->input_buffer;
+         ctx->inputbuff_iterators[stream_id] = input_buffer;
          continue;
       }
 
       if (*i == '/') {
 
-         struct range_t line = get_range_by_iterators(ctx->input_buffer, ctx->inputbuff_iterator);
+         struct range_t line = get_range_by_iterators(input_buffer, ctx->inputbuff_iterators[stream_id]);
 
-         if ( (range_size(&line) == 1) && ( *ctx->input_buffer == 'A' || *ctx->input_buffer == 'a' )) {
+         if ( (range_size(&line) == 1) && ( *input_buffer == 'A' || *input_buffer == 'a' )) {
 
-            struct range_t lline = get_range_by_iterators(ctx->last_input_buffer, ctx->lastinbuff_iterator);
+            struct range_t lline = get_range_by_iterators(last_input_buffer, ctx->lastinbuff_iterators[stream_id]);
 
             if (range_is_empty(&lline) == false) {
-               at_process_line(ctx, &lline);
+               at_process_line(ctx, &lline, stream_id);
             }
 
-            ctx->inputbuff_iterator = ctx->input_buffer;
+            ctx->inputbuff_iterators[stream_id] = input_buffer;
             continue;
          }
       }
 
-      if ( ctx->inputbuff_iterator == at_get_input_buffer_end_iterator(ctx)) {
+      if ( ctx->inputbuff_iterators[stream_id] == at_get_input_buffer_end_iterator(ctx, stream_id)) {
          // Silently discard input buffer, on buffer overflow
-         ctx->inputbuff_iterator = ctx->input_buffer;
+         ctx->inputbuff_iterators[stream_id] = input_buffer;
          continue;
       }
 
-      *ctx->inputbuff_iterator++ = *i;
+      *(ctx->inputbuff_iterators[stream_id]) = *i;
+      ctx->inputbuff_iterators[stream_id] = ctx->inputbuff_iterators[stream_id] + 1;
    }
 }
 
-void at_add_unsolicited(struct at_context_t *ctx, const char *prefix, const char *text){
-   at_append_line(ctx, "");
-   at_append_text(ctx, "+");
-   at_append_text(ctx, prefix);
-   at_append_text(ctx, ": ");
-   at_append_line(ctx, text);
-   at_flush_output(ctx);
+void at_add_unsolicited(struct at_context_t *ctx, const char *prefix, const char *text, uint32_t stream_id){
+   at_append_line(ctx, "", stream_id);
+   at_append_text(ctx, "+", stream_id);
+   at_append_text(ctx, prefix, stream_id);
+   at_append_text(ctx, ": ", stream_id);
+   at_append_line(ctx, text, stream_id);
+   at_flush_output(ctx, stream_id);
 }
 
-void at_add_unsolicited_line(struct at_context_t *ctx, const char *text) {
-   at_append_line(ctx, "");
-   at_append_line(ctx, text);
-   at_flush_output(ctx);
+void at_add_unsolicited_line(struct at_context_t *ctx, const char *text, uint32_t stream_id) {
+   at_append_line(ctx, "", stream_id);
+   at_append_line(ctx, text, stream_id);
+   at_flush_output(ctx, stream_id);
 }
