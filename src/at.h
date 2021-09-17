@@ -122,6 +122,9 @@ bool at_get_in_quota_value(struct range_t *range, struct range_t *result);
 void *at_get_state (struct at_context_t *context);
 void at_set_state (struct at_context_t *context, void* state);
 
+/* Enable/disable echo programmatically */
+void at_set_echo(struct at_context_t *ctx, bool echo);
+
 void at_invalid_chars_error(struct at_function_result *r);
 void at_unknown_error(struct at_function_result *r);
 void at_ok_result(struct at_function_result *r);
@@ -138,6 +141,7 @@ void at_append_line(struct at_context_t *ctx, const char *text, uint32_t stream_
 void at_append_int(struct at_context_t *ctx, int value, uint32_t stream_id);
 void at_append_double(struct at_context_t *ctx, double value, uint32_t stream_id);
 void at_append_text(struct at_context_t *ctx, const char *text, uint32_t stream_id);
+void at_append_range(struct at_context_t *ctx, struct range_t* range, uint32_t stream_id);
 void at_append_char(struct at_context_t *ctx, unsigned char c, uint32_t stream_id);
 
 #ifdef __cplusplus

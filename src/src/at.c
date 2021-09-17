@@ -68,6 +68,12 @@ void at_append_text(struct at_context_t *ctx, const char *text, uint32_t stream_
    }
 }
 
+void at_append_range(struct at_context_t *ctx, struct range_t *range, uint32_t stream_id) {
+   for (iterator_t it = range->begin; it != range->end; ++it) {
+      at_append_char(ctx, *it, stream_id);
+   }
+}
+
 void at_append_int(struct at_context_t *ctx, int value, uint32_t stream_id){
    char buff[20];
    snprintf(buff, sizeof(buff), "%i", value);
@@ -280,6 +286,10 @@ void at_command_add(
    ctx->first = p;
 }
 
+void at_set_echo(struct at_context_t *ctx, bool echo) {
+   ctx->echo = echo;
+}
+
 void at_context_init(struct at_context_t **ctx, pflush flush, size_t num_streams, void *udata)
 {
    *ctx = (struct at_context_t *)malloc(sizeof(struct at_context_t));
@@ -413,13 +423,6 @@ bool get_at_command(struct range_t *input, struct range_t *result){
    return false;
 }
 
-static void at_append_range(struct at_context_t *ctx, struct range_t *range, uint32_t stream_id){
-   for (iterator_t it = range->begin; it != range->end; ++it) {
-      at_append_char(ctx, *it, stream_id);
-   }
-}
-
-
 static bool is_character(unsigned char c){
    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
 }
@@ -480,11 +483,13 @@ static struct at_command_register_t *at_find_command_register(
 static void at_append_ok(struct at_context_t *ctx, uint32_t stream_id) {
    at_append_line(ctx, "", stream_id);
    at_append_line(ctx, "OK", stream_id);
+   at_append_line(ctx, "", stream_id);
 }
 
 static void at_append_error(struct at_context_t *ctx, uint32_t stream_id) {
    at_append_line(ctx, "", stream_id);
    at_append_line(ctx, "ERROR", stream_id);
+   at_append_line(ctx, "", stream_id);
 }
 
 
