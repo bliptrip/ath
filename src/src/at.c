@@ -145,21 +145,23 @@ void at_ok_result(struct at_function_result *r) {
 
 
 void  at_cmee_buildin_status(struct at_function_result *r, struct at_function_context_t *ctx, void* udata){
-   at_append_line(ctx->context, "", ctx->stream_id);
-   at_append_text(ctx->context, "+CMEE: ", ctx->stream_id);
+   at_append_line(ctx->context, "+CMEE=", ctx->stream_id);
    at_append_int(ctx->context, ctx->context->cmee_level, ctx->stream_id);
-   at_append_line(ctx->context, "", ctx->stream_id);
    at_ok_result(r);
 }
 
 static void ate0_buildin_status(struct at_function_result  *r, struct at_function_context_t *ctx, void* udata){
    ctx->context->echo = false;
+   at_append_line(ctx->context, "e0=", ctx->stream_id);
+   at_append_char(ctx->context, '1', ctx->stream_id);
    at_ok_result(r);
 }
 
 
 static void ate1_buildin_status(struct at_function_result  *r, struct at_function_context_t *ctx, void* udata){
    ctx->context->echo = true;
+   at_append_line(ctx->context, "e1=", ctx->stream_id);
+   at_append_char(ctx->context, '1', ctx->stream_id);
    at_ok_result(r);
 }
 
@@ -182,6 +184,7 @@ iterator_t at_get_parameter(iterator_t begin, iterator_t end, struct range_t *re
 
 
 static void at_standalone_buildin(struct at_function_result *r, struct at_function_context_t *ctx, void* udata){
+   at_append_text(ctx->context, "=", ctx->stream_id);
    at_ok_result(r);
 }
 
@@ -191,6 +194,7 @@ static void at_cmee_buildin_assignment(
       void* udata){
 
 
+   at_append_line(ctx->context, "+CMEE=", ctx->stream_id);
    if (range_is_empty(&ctx->parameters)) {
       at_return_operation_not_supported_error(r);
       return;
@@ -198,8 +202,7 @@ static void at_cmee_buildin_assignment(
 
    if (range_equals(&ctx->parameters, "?") ||
        range_equals(&ctx->parameters, "\"?\"")) {
-      at_append_line(ctx->context, "", ctx->stream_id);
-      at_append_line(ctx->context, "+CMEE: (0-2)", ctx->stream_id);
+      at_append_text(ctx->context, "(0-2)", ctx->stream_id);
       at_ok_result(r);
       return ;
    }
@@ -216,6 +219,7 @@ static void at_cmee_buildin_assignment(
       int new_cmee;
       if (range_convert_to_int(&result, &new_cmee) && (new_cmee >= 0) && (new_cmee <= 2)) {
          ctx->context->cmee_level = new_cmee;
+         at_append_int(ctx->context, new_cmee, ctx->stream_id);
          at_ok_result(r);
          return ;
       }
@@ -482,14 +486,12 @@ static struct at_command_register_t *at_find_command_register(
 
 static void at_append_ok(struct at_context_t *ctx, uint32_t stream_id) {
    at_append_line(ctx, "", stream_id);
-   at_append_line(ctx, "OK", stream_id);
-   at_append_line(ctx, "", stream_id);
+   at_append_text(ctx, "OK", stream_id);
 }
 
 static void at_append_error(struct at_context_t *ctx, uint32_t stream_id) {
-   at_append_line(ctx, "", stream_id);
+   at_append_line(ctx, " ", stream_id); //Need a space here to designate that there is no data - and not two CRLF back to back (designate end of message)
    at_append_line(ctx, "ERROR", stream_id);
-   at_append_line(ctx, "", stream_id);
 }
 
 
@@ -623,17 +625,19 @@ static void at_process_commands(
          at_append_error(ctx, stream_id);
          break;
       case 1:
-         at_append_line(ctx, "", stream_id);
+         at_append_line(ctx, " ", stream_id);
          at_append_text(ctx, "+CME ERROR: ", stream_id);
          at_append_int(ctx, result.code, stream_id);
-         at_append_line(ctx, "", stream_id);
          break;
       case 2:
-         at_append_line(ctx, "", stream_id);
+         at_append_line(ctx, " ", stream_id);
          at_append_text(ctx, "+CME ERROR: ", stream_id);
-         at_append_line(ctx, result.detailed, stream_id);
+         at_append_text(ctx, result.detailed, stream_id);
       }
    }
+   //End of message
+   at_append_line(ctx, "", stream_id);
+   at_append_line(ctx, "", stream_id);
 
    at_flush_output(ctx, stream_id);
 }
