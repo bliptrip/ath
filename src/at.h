@@ -63,11 +63,11 @@ extern int at_trace(const char* fmt, ...); //Defined elsewhere to customize how 
 
 
 #ifndef AT_INPUT_BUFFER_SIZE
-#define AT_INPUT_BUFFER_SIZE 32
+#define AT_INPUT_BUFFER_SIZE 64
 #endif
 
 #ifndef AT_OUTPUT_BUFFER_SIZE
-#define AT_OUTPUT_BUFFER_SIZE 32
+#define AT_OUTPUT_BUFFER_SIZE 64 
 #endif
 
 enum AT_CMD_TYPE {
